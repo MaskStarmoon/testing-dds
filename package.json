@@ -1,0 +1,24 @@
+{
+  "name": "Starmoon",
+  "author": "MaskStarmoon",
+  "description": "bloxd",
+  "version": "1.2.0",
+  "main": "index.js",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {},
+  "engines": {
+    "node": "16.x"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "https": "^1.0.0",
+    "child_process": "^1.0.2",
+    "fs": "^0.0.1-security",
+    "axios": "^0.27.2"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  }
+}
