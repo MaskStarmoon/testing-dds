@@ -1,49 +1,92 @@
 const axios = require('axios');
+const dns = require('dns').promises;
 
-const PING_URL = "https://ep1.adtrafficquality.google/getconfig/sodar";
+const GOOGLE_PING_URL = "https://ep1.adtrafficquality.google/getconfig/sodar";
+const SAINSFES_DOMAIN = "sainsfes.com";
+const SAINSFES_PROTOCOL = "https";
 
-function startPing(interval = 2000) {
-    async function pingWeb() {
-        const start = Date.now();
+let cachedIP = null;
 
-        try {
-            const response = await axios.get(PING_URL, {
-                params: {
-                    sv: 200,
-                    tid: "gda",
-                    tv: "r20251211",
-                    st: "env",
-                    sjk: "7497552165096490"
-                },
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                    "Accept": "*/*",
-                    "Referer": "https://www.google.com"
-                },
-                timeout: 5000
-            });
-
-            const latency = Date.now() - start;
-            console.log(
-                `✅ PING OK | ${response.status} | ${latency} ms | ${new Date().toLocaleTimeString()}`
-            );
-
-        } catch (error) {
-            console.error(
-                `❌ PING FAIL | ${error.message} | ${new Date().toLocaleTimeString()}`
-            );
-        }
+// 🔎 Resolve domain → IP (non-fatal)
+async function resolveDomainIP() {
+    try {
+        const res = await dns.lookup(SAINSFES_DOMAIN);
+        cachedIP = res.address;
+        console.log(`🌐 SAINSFES IP: ${cachedIP}`);
+    } catch (err) {
+        console.warn(`⚠️ Gagal resolve IP ${SAINSFES_DOMAIN}: ${err.message}`);
+        cachedIP = null;
     }
-
-    // ping pertama langsung
-    pingWeb();
-
-    // ping berulang
-    const intervalId = setInterval(pingWeb, interval);
-
-    return intervalId; // supaya bisa di-stop dari file utama
 }
 
+// 📡 Ping Google (SELALU JALAN)
+async function pingGoogle() {
+    const start = Date.now();
+    try {
+        const res = await axios.get(GOOGLE_PING_URL, {
+            params: {
+                sv: 200,
+                tid: "gda",
+                tv: "r20251211",
+                st: "env",
+                sjk: "7497552165096490"
+            },
+            timeout: 5000
+        });
+
+        console.log(`✅ GOOGLE | ${res.status} | ${Date.now() - start} ms`);
+    } catch (err) {
+        console.error(`❌ GOOGLE FAIL | ${err.message}`);
+    }
+}
+
+// 📡 Ping sainsfes (jalan hanya jika IP ada)
+async function pingSainsfes() {
+    if (!cachedIP) {
+        console.warn("⚠️ SAINSFES dilewati (IP belum tersedia)");
+        return;
+    }
+
+    const start = Date.now();
+    try {
+        const res = await axios.get(`${SAINSFES_PROTOCOL}://${cachedIP}`, {
+            headers: {
+                "Host": SAINSFES_DOMAIN,
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout: 5000
+        });
+
+        console.log(
+            `✅ SAINSFES (${cachedIP}) | ${res.status} | ${Date.now() - start} ms`
+        );
+    } catch (err) {
+        console.error(
+            `❌ SAINSFES FAIL (${cachedIP}) | ${err.message}`
+        );
+    }
+}
+
+// ▶ Start ping loop (TIDAK PERNAH BATAL)
+function startPing(interval = 2000) {
+
+    // resolve IP pertama kali (async, non-blocking)
+    resolveDomainIP();
+
+    // refresh IP tiap 1 menit (optional tapi aman)
+    setInterval(resolveDomainIP, 60_000);
+
+    async function runPing() {
+        await pingGoogle();
+        await pingSainsfes();
+    }
+
+    runPing();
+    const intervalId = setInterval(runPing, interval);
+    return intervalId;
+}
+
+// 🛑 Stop ping
 function stopPing(intervalId) {
     if (intervalId) {
         clearInterval(intervalId);
